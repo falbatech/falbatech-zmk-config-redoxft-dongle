@@ -1,18 +1,30 @@
 if SHIELD_REDOXFT_DONGLE
+
 config ZMK_KEYBOARD_NAME
     default "Redox FT DGL"
+
 config ZMK_SPLIT_ROLE_CENTRAL
     default y
+
 endif
+
 if SHIELD_REDOXFT_LEFT || SHIELD_REDOXFT_RIGHT
+
 config ZMK_SPLIT_ROLE_CENTRAL
     default n
+
 endif
+
 if SHIELD_REDOXFT_LEFT
+
 config ZMK_KEYBOARD_NAME
     default "Redox FT"
+
 endif
+
 if SHIELD_REDOXFT_LEFT || SHIELD_REDOXFT_RIGHT || SHIELD_REDOXFT_DONGLE
+
 config ZMK_SPLIT
     default y
+
 endif
