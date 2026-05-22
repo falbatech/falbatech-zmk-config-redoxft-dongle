@@ -3,6 +3,7 @@
  * nice!nano v2 (nRF52840), SPI1
  * Identyczne wyprowadzenia jak w Zyra FT Dongle
  */
+#include <zephyr/dt-bindings/display/panel.h>
 
 &pinctrl {
     spi1_default: spi1_default {
