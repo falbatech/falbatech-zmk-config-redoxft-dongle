@@ -2,64 +2,66 @@
  * Redox FT Dongle — GC9A01 240×240 okrągły TFT
  * nice!nano v2 (nRF52840), SPI1
  * Identyczne wyprowadzenia jak w Zyra FT Dongle
+ *
+ *  GC9A01 SCL  -> P0.10
+ *  GC9A01 SDA  -> P0.09
+ *  GC9A01 RES  -> P0.17
+ *  GC9A01 DC   -> P0.22
+ *  GC9A01 CS   -> P0.20
+ *  GC9A01 BL   -> 3V3
  */
 #include <zephyr/dt-bindings/display/panel.h>
-
 &pinctrl {
     spi1_default: spi1_default {
         group1 {
-            psels = <NRF_PSEL(SPIM_SCK,  0, 10)>,
-                    <NRF_PSEL(SPIM_MOSI, 0,  9)>;
+            psels = <NRF_PSEL(SPIM_SCK, 0, 10)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 9)>;
         };
     };
     spi1_sleep: spi1_sleep {
         group1 {
-            psels = <NRF_PSEL(SPIM_SCK,  0, 10)>,
-                    <NRF_PSEL(SPIM_MOSI, 0,  9)>;
+            psels = <NRF_PSEL(SPIM_SCK, 0, 10)>,
+                    <NRF_PSEL(SPIM_MOSI, 0, 9)>;
             low-power-enable;
         };
     };
 };
-
 &spi1 {
-    status = "okay";
     compatible = "nordic,nrf-spim";
+    status = "okay";
     pinctrl-0 = <&spi1_default>;
     pinctrl-1 = <&spi1_sleep>;
     pinctrl-names = "default", "sleep";
     cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
-
-    mipi_dbi_st7789: mipi_dbi_st7789@0 {
-        compatible = "zephyr,mipi-dbi-spi";
-        reg = <0>;
-        spi-max-frequency = <8000000>;
-        dc-gpios  = <&gpio0 22 GPIO_ACTIVE_HIGH>;
-        reset-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
-        write-only;
-        #mipi-dbi-bus-cells = <0>;
-    };
 };
-
 / {
     chosen {
-        zephyr,display = &gc9a01_display;
+        zmk,kscan = &mock_kscan;
+        zephyr,display = &gc9a01;
     };
-
-    gc9a01_display: gc9a01_display {
-        compatible = "galaxycore,gc9x01x";
-        mipi-dbi-bus = <&mipi_dbi_st7789>;
-        mipi-max-frequency = <8000000>;
-        width  = <240>;
-        height = <240>;
-        display-inversion;
-        pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
-        pwctrl1 = [ec 64];
-        pwctrl2 = [c7];
-        pwctrl3 = [45 f8];
-        pwctrl4 = [02 2a];
-        pwctrl5 = [23 27];
-        gamma1  = [45 09 08 08 26 2a];
-        gamma2  = [43 70 72 36 37 6f];
-        vregctrl1 = [19];
+    mock_kscan: mock_kscan_0 {
+        compatible = "zmk,kscan-mock";
+        columns = <0>;
+        rows = <0>;
+        events = <0>;
+    };
+    mipi_dbi {
+        compatible = "zephyr,mipi-dbi-spi";
+        spi-dev = <&spi1>;
+        dc-gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+        reset-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
+        write-only;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        gc9a01: gc9x01x@0 {
+            compatible = "galaxycore,gc9x01x";
+            reg = <0>;
+            mipi-max-frequency = <8000000>;
+            mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
+            width = <240>;
+            height = <240>;
+            pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
+            display-inversion;
+        };
     };
 };
