@@ -1,45 +1,37 @@
 # zmk-config-redoxft
 
-## PL
-
-Konfiguracja ZMK dla **Redox FT** - rozszerzonej klawiatury ergonomicznej FalbaTech.
+Konfiguracja ZMK dla **Redox FT** - klawiatura ergonomiczna FalbaTech (rozszerzona).
 
 ## Hardware
 
-- Shield: `redox` (oficjalny shield upstream ZMK)
-- Kontrolery: 2x nice!nano v2
-- Wyświetlacz: nice!view, Sharp Memory LCD
+- Shield: `redox` (oficjalny w upstream ZMK)
+- Kontrolery: 2× nice!nano v2
+- Wyświetlacz: nice!view (Sharp Memory LCD)
 - RGB: per-key WS2812, 35 LED na każdej połówce
-- 70 klawiszy, 5 rzędów x 7 kolumn + 5 thumb na stronę
+- 70 klawiszy (5 rzędów × 7 kolumn + 5 thumb na stronę)
 
 ## Warstwy
 
 | # | Nazwa | Funkcja |
-|---|---|---|
-| 0 | `DEF` | QWERTY base |
-| 1 | `NAV` | Strzałki, nawigacja |
-| 2 | `SYM` | Symbole, brackets |
-| 3 | `ADJ` | F-keys, system, BT controls |
-| 4 | `EXTRA` | Mouse emulation + RGB controls |
+|---|-------|---------|
+| 0 | DEF | QWERTY base |
+| 1 | NAV | Strzałki, nawigacja |
+| 2 | SYM | Symbole, brackets |
+| 3 | ADJ | F-keys, **system**, **BT controls** |
+| 4 | EXTRA | Mouse emulation + RGB controls |
 
 ## ZMK Studio
 
-ZMK Studio jest aktywne.
+Aktywne. **Procedura odblokowania (jednakowa we wszystkich klawiaturach FalbaTech FT):**
 
-Procedura odblokowania jest taka sama we wszystkich klawiaturach FalbaTech FT:
-
-> Trzymaj oba thumby aktywujące warstwy systemowe i wciśnij skrajny lewy górny klawisz.
-
-Po odblokowaniu klawiatura jest edytowalna z poziomu przeglądarki:
-
-https://zmk.studio
+> Trzymaj oba thumby aktywujące warstwy systemowe - wciśnij **skrajny lewy górny klawisz**.
 
 ## Bluetooth - obsługa 5 urządzeń
 
-Klawiatura obsługuje 5 niezależnych profili Bluetooth. Sterowanie odbywa się w warstwie systemowej `ADJ`.
+Klawiatura obsługuje **5 niezależnych profili Bluetooth**. W warstwie systemowej (ADJ):
 
 | Klawisz | Funkcja |
-|---|---|
+|---------|---------|
 | `Z` | Profil BT 0 |
 | `X` | Profil BT 1 |
 | `C` | Profil BT 2 |
@@ -50,19 +42,15 @@ Klawiatura obsługuje 5 niezależnych profili Bluetooth. Sterowanie odbywa się 
 | `,` | Tryb USB |
 | `.` | Tryb Bluetooth |
 
-### Parowanie nowego urządzenia
+**Parowanie nowego urządzenia:**
+1. ADJ + odpowiedni klawisz BT (Z-B)
+2. Znajdź "Redox FT" w liście Bluetooth na komputerze
+3. Sparuj
 
-1. Wejdź do warstwy `ADJ`.
-2. Wciśnij odpowiedni klawisz Bluetooth `Z-B`.
-3. Znajdź „Redox FT” w ustawieniach Bluetooth komputera lub telefonu.
-4. Sparuj urządzenie.
-
-## RGB controls
-
-Sterowanie RGB znajduje się w warstwie `EXTRA`.
+## RGB controls (warstwa EXTRA)
 
 | Klawisz | Funkcja |
-|---|---|
+|---------|---------|
 | `Q` | RGB on/off |
 | `W` | Zmiana efektu |
 | `E/R` | Hue +/- |
@@ -72,120 +60,17 @@ Sterowanie RGB znajduje się w warstwie `EXTRA`.
 
 ## Build
 
-GitHub Actions buduje 3 pliki firmware:
-
+GitHub Actions buduje 3 firmware:
 - `redox_left-nice_nano-zmk.uf2`
 - `redox_right-nice_nano-zmk.uf2`
 - `settings_reset-nice_nano-zmk.uf2`
 
 ## Flashowanie
 
-1. Podłącz lewą połówkę przez USB.
-2. Naciśnij RESET dwa razy szybko.
-3. Przeciągnij `redox_left-...uf2` na dysk `NICENANO`.
-4. Podłącz prawą połówkę przez USB.
-5. Naciśnij RESET dwa razy szybko.
-6. Przeciągnij `redox_right-...uf2`.
-7. Połącz obie połówki przewodem TRRS.
-8. Sparuj klawiaturę jako "Redox FT" przez Bluetooth.
+1. Lewa USB - 2× reset - przeciągnij `redox_left-...uf2`
+2. Prawa USB - 2× reset - `redox_right-...uf2`
+3. Połącz TRRS - klawiatura "Redox FT" w BT
 
 ## Wsparcie
 
-FalbaTech  
-https://falbatech.click
-
----
-
-## EN
-
-ZMK configuration for **Redox FT** - extended ergonomic FalbaTech keyboard.
-
-## Hardware
-
-- Shield: `redox` (official upstream ZMK shield)
-- Controllers: 2x nice!nano v2
-- Display: nice!view, Sharp Memory LCD
-- RGB: per-key WS2812, 35 LEDs on each half
-- 70 keys, 5 rows x 7 columns + 5 thumb keys per side
-
-## Layers
-
-| # | Name | Function |
-|---|---|---|
-| 0 | `DEF` | QWERTY base |
-| 1 | `NAV` | Arrows, navigation |
-| 2 | `SYM` | Symbols, brackets |
-| 3 | `ADJ` | F-keys, system, BT controls |
-| 4 | `EXTRA` | Mouse emulation + RGB controls |
-
-## ZMK Studio
-
-ZMK Studio is enabled.
-
-The unlock procedure is the same across all FalbaTech FT keyboards:
-
-> Hold both thumb keys activating system layers and press the top left key.
-
-After unlocking, the keyboard can be configured from your browser:
-
-https://zmk.studio
-
-## Bluetooth - 5 device support
-
-The keyboard supports 5 independent Bluetooth profiles. Control is handled in the system layer `ADJ`.
-
-| Key | Function |
-|---|---|
-| `Z` | BT Profile 0 |
-| `X` | BT Profile 1 |
-| `C` | BT Profile 2 |
-| `V` | BT Profile 3 |
-| `B` | BT Profile 4 |
-| `N` | Clear active profile |
-| `M` | Clear all profiles |
-| `,` | USB mode |
-| `.` | Bluetooth mode |
-
-### Pairing a new device
-
-1. Enter the `ADJ` layer.
-2. Press the selected Bluetooth key `Z-B`.
-3. Find “Redox FT” in your computer or phone Bluetooth settings.
-4. Pair the device.
-
-## RGB controls
-
-RGB controls are located in the `EXTRA` layer.
-
-| Key | Function |
-|---|---|
-| `Q` | RGB on/off |
-| `W` | Change effect |
-| `E/R` | Hue +/- |
-| `S/D` | Brightness +/- |
-| `F/G` | Saturation +/- |
-| `X/C` | Speed +/- |
-
-## Build
-
-GitHub Actions builds 3 firmware files:
-
-- `redox_left-nice_nano-zmk.uf2`
-- `redox_right-nice_nano-zmk.uf2`
-- `settings_reset-nice_nano-zmk.uf2`
-
-## Flashing
-
-1. Connect the left half via USB.
-2. Press RESET twice quickly.
-3. Drag `redox_left-...uf2` onto the `NICENANO` drive.
-4. Connect the right half via USB.
-5. Press RESET twice quickly.
-6. Drag `redox_right-...uf2`.
-7. Connect both halves using a TRRS cable.
-8. Pair the keyboard as "Redox FT" over Bluetooth.
-
-## Support
-
-FalbaTech  
-https://falbatech.click
+FalbaTech - [falbatech.click](https://falbatech.click)

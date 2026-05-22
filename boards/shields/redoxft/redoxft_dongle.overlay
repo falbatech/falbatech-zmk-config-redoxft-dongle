@@ -1,0 +1,64 @@
+/*
+ * Redox FT Dongle — GC9A01 240×240 okrągły TFT
+ * nice!nano v2 (nRF52840), SPI1
+ * Identyczne wyprowadzenia jak w Zyra FT Dongle
+ */
+
+&pinctrl {
+    spi1_default: spi1_default {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK,  0, 10)>,
+                    <NRF_PSEL(SPIM_MOSI, 0,  9)>;
+        };
+    };
+    spi1_sleep: spi1_sleep {
+        group1 {
+            psels = <NRF_PSEL(SPIM_SCK,  0, 10)>,
+                    <NRF_PSEL(SPIM_MOSI, 0,  9)>;
+            low-power-enable;
+        };
+    };
+};
+
+&spi1 {
+    status = "okay";
+    compatible = "nordic,nrf-spim";
+    pinctrl-0 = <&spi1_default>;
+    pinctrl-1 = <&spi1_sleep>;
+    pinctrl-names = "default", "sleep";
+    cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
+
+    mipi_dbi_st7789: mipi_dbi_st7789@0 {
+        compatible = "zephyr,mipi-dbi-spi";
+        reg = <0>;
+        spi-max-frequency = <8000000>;
+        dc-gpios  = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+        reset-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
+        write-only;
+        #mipi-dbi-bus-cells = <0>;
+    };
+};
+
+/ {
+    chosen {
+        zephyr,display = &gc9a01_display;
+    };
+
+    gc9a01_display: gc9a01_display {
+        compatible = "galaxycore,gc9x01x";
+        mipi-dbi-bus = <&mipi_dbi_st7789>;
+        mipi-max-frequency = <8000000>;
+        width  = <240>;
+        height = <240>;
+        display-inversion;
+        pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
+        pwctrl1 = [ec 64];
+        pwctrl2 = [c7];
+        pwctrl3 = [45 f8];
+        pwctrl4 = [02 2a];
+        pwctrl5 = [23 27];
+        gamma1  = [45 09 08 08 26 2a];
+        gamma2  = [43 70 72 36 37 6f];
+        vregctrl1 = [19];
+    };
+};

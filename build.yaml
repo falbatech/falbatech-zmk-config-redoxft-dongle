@@ -1,8 +1,27 @@
+# Redox FT — dongle z GC9A01 + 2 połówki peryferyjne (nice!nano v2)
+---
 include:
+  # Dongle — centralny kontroler z wyświetlaczem GC9A01 + ZMK Studio
   - board: nice_nano//zmk
-    shield: redox_left nice_view_adapter nice_view
+    shield: redoxft_dongle
+    artifact-name: redoxft-dongle-zmk-studio
     snippet: studio-rpc-usb-uart
+
+  # Dongle — bez ZMK Studio (do debugowania)
   - board: nice_nano//zmk
-    shield: redox_right nice_view_adapter nice_view
+    shield: redoxft_dongle
+    artifact-name: redoxft-dongle
+
+  # Połówki peryferyjne
+  - board: nice_nano//zmk
+    shield: redoxft_left
+    artifact-name: redoxft-left
+
+  - board: nice_nano//zmk
+    shield: redoxft_right
+    artifact-name: redoxft-right
+
+  # Reset ustawień (flash jako pierwszy przy problemach z parowaniem)
   - board: nice_nano//zmk
     shield: settings_reset
+    artifact-name: settings-reset
