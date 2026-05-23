@@ -1,8 +1,6 @@
 config SHIELD_REDOXFT_LEFT
     def_bool $(shields_list_contains,redoxft_left)
-
 config SHIELD_REDOXFT_RIGHT
     def_bool $(shields_list_contains,redoxft_right)
-
 config SHIELD_REDOXFT_DONGLE
     def_bool $(shields_list_contains,redoxft_dongle)
