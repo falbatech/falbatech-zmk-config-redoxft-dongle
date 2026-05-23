@@ -11,20 +11,17 @@
  *  - wewnętrzna kolumna obok kciuków (4 klawisze)
  *  - rozszerzony thumb cluster (4 klawisze)
  */
-
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/bt.h>
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/pointing.h>
 #include <dt-bindings/zmk/rgb.h>
 #include <dt-bindings/zmk/outputs.h>
-
 #define DEF 0
 #define NAV 1
 #define SYM 2
 #define ADJ 3
 #define EXTRA 4
-
 / {
     behaviors {
         hm: homerow_mods {
@@ -33,30 +30,25 @@
             tapping-term-ms = <200>;
             flavor = "tap-preferred";
             bindings = <&kp>, <&kp>;
-
             quick-tap-ms = <180>;
             require-prior-idle-ms = <120>;
         };
-
         para: para {
             compatible = "zmk,behavior-tap-dance";
             #binding-cells = <0>;
             bindings = <&kp LEFT_PARENTHESIS>, <&kp RIGHT_PARENTHESIS>;
         };
-
         caps: caps {
             compatible = "zmk,behavior-caps-word";
             #binding-cells = <0>;
             continue-list = <MINUS BACKSPACE>;
         };
-
         paraless: paraless {
             compatible = "zmk,behavior-mod-morph";
             bindings = <&kp LEFT_PARENTHESIS>, <&kp LESS_THAN>;
             #binding-cells = <0>;
             mods = <(MOD_LSFT)>;
         };
-
         paragreat: paragreat {
             compatible = "zmk,behavior-mod-morph";
             bindings = <&kp RIGHT_PARENTHESIS>, <&kp GREATER_THAN>;
@@ -64,7 +56,6 @@
             mods = <(MOD_LSFT)>;
         };
     };
-
     macros {
         browsertab: browsertab {
             compatible = "zmk,behavior-macro";
@@ -78,7 +69,6 @@
                 <&kp LCTRL>;
         };
     };
-
     /*
      * Numeracja klawiszy (po matrix transform):
      *
@@ -90,7 +80,6 @@
      */
     combos {
         compatible = "zmk,combos";
-
         escape    { bindings = <&kp ESCAPE>;       key-positions = <30 36>; };
         delete    { bindings = <&kp DELETE>;        key-positions = <17 21>; };
         perc      { bindings = <&kp PERCENT>;       key-positions = <18 35>; layers = <0>; };
@@ -109,10 +98,8 @@
         para_less { bindings = <&paraless>;         key-positions = <51 50>; layers = <0>; };
         para_great{ bindings = <&paragreat>;        key-positions = <51 52>; layers = <0>; };
     };
-
     keymap {
         compatible = "zmk,keymap";
-
         DEF {
             display-name = "Base";
             bindings = <
@@ -123,7 +110,6 @@
 &kp ESC    &kp LALT   &kp LGUI  &mo NAV         &kp SPACE     &kp LGUI  &kp DEL   &kp RET   &lt SYM TAB         &mo NAV     &kp LEFT      &kp DOWN  &kp UP    &kp RIGHT
             >;
         };
-
         NAV {
             display-name = "NavNum";
             bindings = <
@@ -134,7 +120,6 @@
 &trans     &trans        &trans        &trans                  &trans                &trans  &trans  &trans  &mo ADJ                     &trans    &trans    &trans    &trans   &trans
             >;
         };
-
         SYM {
             display-name = "Symbols";
             bindings = <
@@ -145,7 +130,6 @@
 &trans  &trans     &trans          &mo ADJ                  &trans             &trans  &trans  &trans  &trans                     &trans     &trans     &trans                &trans    &trans
             >;
         };
-
         ADJ {
             display-name = "System";
             bindings = <
@@ -156,7 +140,6 @@
 &trans          &trans        &trans        &trans                &trans                  &trans  &trans  &trans  &trans                                  &trans       &trans         &trans        &trans       &trans
             >;
         };
-
         EXTRA {
             display-name = "Extra";
             bindings = <
