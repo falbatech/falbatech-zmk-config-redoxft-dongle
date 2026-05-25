@@ -1,8 +1,8 @@
 /*
- * Redox FT keymap - port z corne-kbh
+ * Redox FT keymap — dongle version
  *
  * 5 warstw: DEF, NAV, SYM, ADJ, EXTRA
- * 35 per-key LED na każdej połówce (LED data na D1/TX, dzielone z nice_view CS jak w corne/sofle)
+ * 35 per-key LED na każdej połówce (konfiguracja chain-length w overlay)
  * Kompatybilne z ZMK Studio
  *
  * Dodatkowe klawisze Redoxa względem Corne (28 nowych pozycji):
@@ -16,7 +16,6 @@
 #include <dt-bindings/zmk/bt.h>
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/pointing.h>
-#include <dt-bindings/zmk/rgb.h>
 #include <dt-bindings/zmk/outputs.h>
 
 #define DEF 0
@@ -24,11 +23,6 @@
 #define SYM 2
 #define ADJ 3
 #define EXTRA 4
-
-/* Override chain-length: shield Redox ma domyślnie 10, my mamy 35 per strona */
-&led_strip {
-    chain-length = <35>;
-};
 
 / {
     behaviors {
@@ -85,140 +79,34 @@
     };
 
     /*
-     * Numeracja klawiszy w Redoxie (po matrix transform):
+     * Numeracja klawiszy (po matrix transform):
      *
      *  Rząd 0:  0  1  2  3  4  5                   6  7  8  9  10 11
      *  Rząd 1: 12 13 14 15 16 17 18              19 20 21 22 23 24 25
      *  Rząd 2: 26 27 28 29 30 31 32              33 34 35 36 37 38 39
      *  Rząd 3: 40 41 42 43 44 45 46 47        48 49 50 51 52 53 54 55
      *  Rząd 4: 56 57 58 59 60    61 62 63    64 65 66    67 68 69
-     *
-     * UWAGA: pozycje w combos zostały przeliczone z Corne (42-key) na Redox (70-key).
-     * W Corne były: 13 29, 15 21, itp. W Redoxie te same litery są pod innymi numerami.
-     * Mapping (litery z bazowego DEF):
-     *   Q=14 W=15 E=16 R=17 T=18    Y=20 U=21 I=22 O=23 P=24
-     *   A=28 S=29 D=30 F=31 G=32    H=34 J=35 K=36 L=37 ;=38
-     *   Z=42 X=43 C=44 V=45 B=46    N=50 M=51 ,=52 .=53 /=54
      */
     combos {
         compatible = "zmk,combos";
 
-        /* ESC = D + K (jak w Corne: pozycje 13+29 → tu 30+36) */
-        escape {
-            bindings = <&kp ESCAPE>;
-            key-positions = <30 36>;
-        };
-
-        /* DEL = R + U (Corne 15+21 → Redox 17+21) */
-        delete {
-            bindings = <&kp DELETE>;
-            key-positions = <17 21>;
-        };
-
-        /* % = T + J (Corne 5+17 → Redox 18+35) */
-        perc {
-            bindings = <&kp PERCENT>;
-            key-positions = <18 35>;
-            layers = <0>;
-        };
-
-        /* = = (V + J) (Corne 28+16 → Redox 45+35) */
-        equal {
-            bindings = <&kp EQUAL>;
-            key-positions = <45 35>;
-            layers = <0>;
-        };
-
-        /* $ = R + J (Corne 4+16 → Redox 17+35) */
-        dollar {
-            bindings = <&kp DOLLAR>;
-            key-positions = <17 35>;
-            layers = <0>;
-        };
-
-        /* # = E + K (Corne 3+15 → Redox 16+36) */
-        pound {
-            bindings = <&kp POUND>;
-            key-positions = <16 36>;
-            layers = <0>;
-        };
-
-        /* @ = W + L (Corne 2+14 → Redox 15+37) */
-        at {
-            bindings = <&kp AT>;
-            key-positions = <15 37>;
-            layers = <0>;
-        };
-
-        /* \ = C + L (Corne 26+14 → Redox 44+37) */
-        backslash {
-            bindings = <&kp BACKSLASH>;
-            key-positions = <44 37>;
-            layers = <0>;
-        };
-
-        /* * = U + M (Corne 8+20 → Redox 21+51) */
-        star {
-            bindings = <&kp STAR>;
-            key-positions = <21 51>;
-            layers = <0>;
-        };
-
-        /* / = M + . (Corne 32+20 → Redox 51+53) - uwaga: uważne sprawdzenie */
-        slash {
-            bindings = <&kp SLASH>;
-            key-positions = <53 51>;
-            layers = <0>;
-        };
-
-        /* + = Y + N (Corne 7+19 → Redox 20+50) */
-        plus {
-            bindings = <&kp PLUS>;
-            key-positions = <20 50>;
-            layers = <0>;
-        };
-
-        /* - = N + , (Corne 31+19 → Redox 50+52) */
-        minus {
-            bindings = <&kp KP_MINUS>;
-            key-positions = <50 52>;
-            layers = <0>;
-        };
-
-        /* _ = , + . (Corne 30+18 → Redox 52+53) */
-        underscore {
-            bindings = <&kp UNDER>;
-            key-positions = <52 53>;
-            layers = <0>;
-        };
-
-        /* [ = N + M (Corne 31+32 → Redox 50+51) */
-        leftbrack {
-            bindings = <&kp LEFT_BRACKET>;
-            key-positions = <50 51>;
-            layers = <0>;
-        };
-
-        /* ] = , + M (Corne 33+32 → Redox 52+51) */
-        rightbrack {
-            bindings = <&kp RIGHT_BRACKET>;
-            key-positions = <52 51>;
-            layers = <0>;
-        };
-
-        /* < = M + N (paraless) - Corne 20+19 → Redox 51+50 */
-        para-less {
-            bindings = <&paraless>;
-            key-positions = <51 50>;
-            layers = <0>;
-        };
-
-        /* > = M + , (paragreat) - Corne 20+21 - to były inne pozycje, używam M+, na razie */
-        para-great {
-            bindings = <&paragreat>;
-            key-positions = <51 52>;
-            layers = <0>;
-        };
+        escape    { bindings = <&kp ESCAPE>;       key-positions = <30 36>; };
+        delete    { bindings = <&kp DELETE>;        key-positions = <17 21>; };
+        perc      { bindings = <&kp PERCENT>;       key-positions = <18 35>; layers = <0>; };
+        equal     { bindings = <&kp EQUAL>;         key-positions = <45 35>; layers = <0>; };
+        dollar    { bindings = <&kp DOLLAR>;        key-positions = <17 35>; layers = <0>; };
+        pound     { bindings = <&kp POUND>;         key-positions = <16 36>; layers = <0>; };
+        at        { bindings = <&kp AT>;            key-positions = <15 37>; layers = <0>; };
+        backslash { bindings = <&kp BACKSLASH>;     key-positions = <44 37>; layers = <0>; };
+        star      { bindings = <&kp STAR>;          key-positions = <21 51>; layers = <0>; };
+        slash     { bindings = <&kp SLASH>;         key-positions = <53 51>; layers = <0>; };
+        plus      { bindings = <&kp PLUS>;          key-positions = <20 50>; layers = <0>; };
+        minus     { bindings = <&kp KP_MINUS>;      key-positions = <50 52>; layers = <0>; };
+        underscore{ bindings = <&kp UNDER>;         key-positions = <52 53>; layers = <0>; };
+        leftbrack { bindings = <&kp LEFT_BRACKET>;  key-positions = <50 51>; layers = <0>; };
+        rightbrack{ bindings = <&kp RIGHT_BRACKET>; key-positions = <52 51>; layers = <0>; };
+        para_less { bindings = <&paraless>;         key-positions = <51 50>; layers = <0>; };
+        para_great{ bindings = <&paragreat>;        key-positions = <51 52>; layers = <0>; };
     };
 
     keymap {
@@ -226,20 +114,6 @@
 
         DEF {
             display-name = "Base";
-
-/*
- * ┌──────┬──────┬──────┬──────┬──────┬──────┐                    ┌──────┬──────┬──────┬──────┬──────┬──────┐
- * │  =   │  1   │  2   │  3   │  4   │  5   │                    │  6   │  7   │  8   │  9   │  0   │  -   │
- * ├──────┼──────┼──────┼──────┼──────┼──────┼──────┐      ┌──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- * │ TAB  │  Q   │  W   │  E   │  R   │  T   │ HOME │      │ PGUP │  Y   │  U   │  I   │  O   │  P   │ BSPC │
- * ├──────┼──────┼──────┼──────┼──────┼──────┼──────┤      ├──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- * │LSHFT │  A   │  S   │  D   │  F   │  G   │  END │      │ PGDN │  H   │  J   │  K   │  L   │  ;   │  '   │
- * ├──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
- * │LCTRL │  Z   │  X   │  C   │  V   │  B   │  (   │  [   │  ]   │  )   │  N   │  M   │  ,   │  .   │  /   │mo EX │
- * ├──────┼──────┼──────┼──────┼──────┼──────┴──────┼──────┼──────┼──────┴──────┼──────┼──────┼──────┼──────┤
- * │ESC   │ ALT  │ GUI  │mo NAV│    SPACE    │ LGUI │ DEL  │ENTER │   lt SYM    │mo NAV│ LEFT │ DOWN │ UP   │RIGHT │
- * └──────┴──────┴──────┴──────┴─────────────┴──────┴──────┴──────┴─────────────┴──────┴──────┴──────┴──────┘
- */
             bindings = <
 &kp EQUAL  &kp N1     &kp N2    &kp N3   &kp N4   &kp N5                                              &kp N6     &kp N7     &kp N8        &kp N9    &kp N0    &kp MINUS
 &kp TAB    &kp Q      &kp W     &kp E    &kp R    &kp T      &kp HOME                      &kp PG_UP  &kp Y      &kp U      &kp I         &kp O     &kp P     &kp BSPC
@@ -251,11 +125,6 @@
 
         NAV {
             display-name = "NavNum";
-
-/*
- * Numpad po prawej (4/5/6 i 1/2/3 jak w starej warstwie NAV z Corne),
- * strzałki na home row prawej ręki, BT na lewej.
- */
             bindings = <
 &trans     &kp F1        &kp F2        &kp F3        &kp F4           &kp F5                                                  &kp F6     &kp F7    &kp F8    &kp F9    &kp F10  &trans
 &trans     &trans        &trans        &kp UP_ARROW  &browsertab      &kp PAGE_UP    &trans                          &trans   &kp N0     &kp N4    &kp N5    &kp N6    &trans   &trans
@@ -267,10 +136,6 @@
 
         SYM {
             display-name = "Symbols";
-
-/*
- * Symbole po prawej, strzałki centrum, znaki specjalne lewa.
- */
             bindings = <
 &trans  &trans     &trans          &trans          &trans           &trans                                              &trans     &trans     &trans     &trans                &trans    &trans
 &trans  &kp EXCL   &kp AT          &kp HASH        &kp DLLR         &kp PRCNT  &trans                          &trans   &kp CARET  &kp AMPS   &kp ASTRK  &kp LEFT_PARENTHESIS  &kp RPAR  &trans
@@ -293,20 +158,12 @@
 
         EXTRA {
             display-name = "Extra";
-/*
- * Lewa ręka: RGB controls
- *   Rząd 1: TOG | EFF (next effect) | EFR (prev effect) | HUI | HUD
- *   Rząd 2: -   | BRI                | BRD                | SAI | SAD
- *   Rząd 3: -   | SPI (speed up)     | SPD (speed down)   | -   | -
- *
- * Prawa ręka: mysz (ruch + scroll + kliki)
- */
             bindings = <
-&trans  &trans            &trans            &trans            &trans            &trans                                                                       &trans  &trans         &trans         &trans     &trans  &trans
-&trans  &rgb_ug RGB_TOG   &rgb_ug RGB_EFF   &rgb_ug RGB_EFR   &rgb_ug RGB_HUI   &rgb_ug RGB_HUD   &trans                                              &trans   &trans  &mmv MOVE_UP   &trans         &msc SCRL_UP   &trans  &trans
-&trans  &trans            &rgb_ug RGB_BRI   &rgb_ug RGB_BRD   &rgb_ug RGB_SAI   &rgb_ug RGB_SAD   &trans                                              &trans   &trans  &mmv MOVE_LEFT &mmv MOVE_DOWN &mmv MOVE_RIGHT &msc SCRL_DOWN &trans
-&trans  &trans            &rgb_ug RGB_SPI   &rgb_ug RGB_SPD   &trans            &trans            &trans   &trans  &trans  &trans                             &trans  &mkp LCLK      &mkp MCLK      &mkp RCLK  &trans  &trans
-&trans  &trans            &trans            &trans                              &trans                      &trans   &trans  &trans  &trans                            &trans         &trans         &trans     &trans  &trans
+&trans  &trans  &trans  &trans  &trans  &trans                                                                       &trans  &trans         &trans         &trans          &trans         &trans
+&trans  &trans  &trans  &trans  &trans  &trans  &trans                                              &trans           &trans  &mmv MOVE_UP   &trans         &msc SCRL_UP    &trans         &trans
+&trans  &trans  &trans  &trans  &trans  &trans  &trans                                              &trans           &trans  &mmv MOVE_LEFT &mmv MOVE_DOWN &mmv MOVE_RIGHT &msc SCRL_DOWN &trans
+&trans  &trans  &trans  &trans  &trans  &trans  &trans   &trans  &trans  &trans                                      &trans  &mkp LCLK      &mkp MCLK      &mkp RCLK       &trans         &trans
+&trans  &trans  &trans  &trans                  &trans           &trans  &trans  &trans  &trans                              &trans         &trans         &trans          &trans         &trans
             >;
         };
     };
