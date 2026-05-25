@@ -9,8 +9,6 @@
  *  - Wskaźniki połączenia L/R z baterią (10-segmentowy słupek)
  *  - 5 kropek profilu BT
  *  - Wskaźniki CAPS / NUM lock
- *  - WPM (słowa na minutę) — aktualizowany w czasie rzeczywistym
- *  - Tryb wyjścia: USB lub BLE
  */
 
 #include <zephyr/kernel.h>
@@ -24,18 +22,10 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/split_central_status_changed.h>
 #include <zmk/events/hid_indicators_changed.h>
-#include <zmk/events/endpoint_changed.h>
-#if IS_ENABLED(CONFIG_ZMK_WPM)
-#include <zmk/events/wpm_state_changed.h>
-#include <zmk/wpm.h>
-#endif
-
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
 #include <zmk/hid_indicators.h>
 #include <zmk/hid.h>
-#include <zmk/endpoints.h>
-#include <zmk/endpoints_types.h>
 
 #include "falbatech_logo.h"
 
@@ -55,9 +45,6 @@ LOG_MODULE_REGISTER(ft_status_screen, CONFIG_LOG_DEFAULT_LEVEL);
 #define C_TEXT          0xFFFFFF   /* biały     */
 #define C_ON            0xE00039   /* zielony   */
 #define C_OFF           0x884890   /* szary     */
-#define C_USB           0x00A0FF   /* niebieski (USB) */
-#define C_BLE           0xE00039   /* zielony (BLE)   */
-#define C_WPM           0xA0FF00   /* żółto-zielony   */
 
 /* ── Pasek baterii ──────────────────────────────────────────────
  * 10 segmentów, każdy 5×18px z przerwą 2px                       */
@@ -75,8 +62,6 @@ static int                  bat_right       = 0;
 static uint8_t              left_reconnects = 0;
 static uint8_t              right_reconnects = 0;
 static zmk_hid_indicators_t hid_indicators  = 0;
-static uint8_t              wpm             = 0;
-static bool                 usb_output      = false;
 
 /* ── Delayed work ────────────────────────────────────────────────*/
 static struct k_work_delayable splash_work;
@@ -95,9 +80,6 @@ static lv_obj_t *right_segs[BAR_SEGS];
 static lv_obj_t *bt_dots[5];
 static lv_obj_t *caps_pill;
 static lv_obj_t *num_pill;
-static lv_obj_t *wpm_lbl;
-static lv_obj_t *output_dot;
-static lv_obj_t *output_lbl;
 
 /* ═══════════════════════════════════════════════════════════════
  * Helpers
@@ -236,35 +218,12 @@ static void update_hid(void)
     set_hidden(num_pill,  !(splash_done && (hid_indicators & HID_KBD_LED_NUM_LOCK)));
 }
 
-static void update_wpm(void)
-{
-    if (!splash_done) { set_hidden(wpm_lbl, true); return; }
-    set_hidden(wpm_lbl, false);
-    lv_label_set_text_fmt(wpm_lbl, "%d WPM", wpm);
-}
-
-static void update_output(void)
-{
-    if (!splash_done) {
-        set_hidden(output_dot, true);
-        set_hidden(output_lbl, true);
-        return;
-    }
-    set_hidden(output_dot, false);
-    set_hidden(output_lbl, false);
-    lv_obj_set_style_bg_color(output_dot,
-        lv_color_hex(usb_output ? C_USB : C_BLE), 0);
-    lv_label_set_text(output_lbl, usb_output ? "USB" : "BLE");
-}
-
 static void refresh_all(void)
 {
     update_layer();
     update_bt_profile();
     update_battery();
     update_hid();
-    update_wpm();
-    update_output();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -342,26 +301,6 @@ static void build_hid_indicators(void)
     num_pill  = pill(screen, "NUM",   28);
 }
 
-static void build_wpm(void)
-{
-    /* WPM — prawy dolny, nad kropkami BT */
-    wpm_lbl = label(screen, "0 WPM", &lv_font_montserrat_14, C_WPM);
-    lv_obj_align(wpm_lbl, LV_ALIGN_BOTTOM_MID, 0, -36);
-    set_hidden(wpm_lbl, true);
-}
-
-static void build_output(void)
-{
-    /* Mała kropka + etykieta "USB" / "BLE" — lewy dolny narożnik */
-    output_dot = box(screen, 8, 8, C_BLE, 4);
-    lv_obj_align(output_dot, LV_ALIGN_BOTTOM_LEFT, 28, -22);
-    set_hidden(output_dot, true);
-
-    output_lbl = label(screen, "BLE", &lv_font_montserrat_14, C_TEXT);
-    lv_obj_align(output_lbl, LV_ALIGN_BOTTOM_LEFT, 40, -26);
-    set_hidden(output_lbl, true);
-}
-
 /* ═══════════════════════════════════════════════════════════════
  * Splash → main transition
  * ═══════════════════════════════════════════════════════════════ */
@@ -430,24 +369,6 @@ static int ft_screen_listener(const zmk_event_t *eh)
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-#if IS_ENABLED(CONFIG_ZMK_WPM)
-    /* WPM — aktualizacja na żywo */
-    const struct zmk_wpm_state_changed *wpm_ev =
-        as_zmk_wpm_state_changed(eh);
-    if (wpm_ev) {
-        wpm = wpm_ev->state;
-        update_wpm();
-        return ZMK_EV_EVENT_BUBBLE;
-    }
-#endif
-
-    /* Zmiana wyjścia USB ↔ BLE */
-    if (as_zmk_endpoint_changed(eh)) {
-        usb_output = (zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_USB);
-        update_output();
-        return ZMK_EV_EVENT_BUBBLE;
-    }
-
     return ZMK_EV_EVENT_BUBBLE;
 }
 
@@ -457,10 +378,6 @@ ZMK_SUBSCRIPTION(ft_screen, zmk_layer_state_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_ble_active_profile_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_peripheral_battery_state_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_hid_indicators_changed);
-#if IS_ENABLED(CONFIG_ZMK_WPM)
-ZMK_SUBSCRIPTION(ft_screen, zmk_wpm_state_changed);
-#endif
-ZMK_SUBSCRIPTION(ft_screen, zmk_endpoint_changed);
 
 /* ═══════════════════════════════════════════════════════════════
  * Inicjalizacja ekranu — wywoływana przez ZMK display system
@@ -480,14 +397,9 @@ lv_obj_t *zmk_display_status_screen(void)
     build_battery();
     build_bt_dots();
     build_hid_indicators();
-    build_wpm();
-    build_output();
 
     k_work_init_delayable(&splash_work, show_main);
     k_work_schedule(&splash_work, K_MSEC(SPLASH_MS));
-
-    /* Inicjalizuj stan wyjścia */
-    usb_output = (zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_USB);
 
     return screen;
 }
