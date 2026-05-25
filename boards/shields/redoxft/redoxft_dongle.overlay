@@ -1,7 +1,7 @@
 /*
  * Redox FT Dongle — GC9A01 240×240 okrągły TFT
  * nice!nano v2 (nRF52840), SPI1
- * Identyczne wyprowadzenia jak w Zyra FT Dongle
+ * nice!nano v2 (nRF52840) — FalbaTech Redox FT Dongle
  *
  *  GC9A01 SCL  -> P0.10
  *  GC9A01 SDA  -> P0.09
@@ -10,9 +10,12 @@
  *  GC9A01 CS   -> P0.20
  *  GC9A01 BL   -> 3V3
  */
+
 #include <zephyr/dt-bindings/display/panel.h>
 #include <dt-bindings/zmk/matrix_transform.h>
+#include <dt-bindings/led/led.h>
 #include "redoxft-layouts.dtsi"
+
 /*
  * Dongle: brak fizycznego kscan — mock_kscan.
  * ZMK Studio wymaga transform na physical layout.
@@ -20,6 +23,7 @@
 &redoxft_physical_layout {
     transform = <&default_transform>;
 };
+
 &pinctrl {
     spi1_default: spi1_default {
         group1 {
@@ -27,6 +31,7 @@
                     <NRF_PSEL(SPIM_MOSI, 0, 9)>;
         };
     };
+
     spi1_sleep: spi1_sleep {
         group1 {
             psels = <NRF_PSEL(SPIM_SCK, 0, 10)>,
@@ -34,21 +39,62 @@
             low-power-enable;
         };
     };
+
+    /* SPI3 — wirtualny LED strip dla rgb_ug (P0.06 niepodłączony na dongle) */
+    spi3_default: spi3_default {
+        group1 {
+            psels = <NRF_PSEL(SPIM_MOSI, 0, 6)>;
+        };
+    };
+    spi3_sleep: spi3_sleep {
+        group1 {
+            psels = <NRF_PSEL(SPIM_MOSI, 0, 6)>;
+            low-power-enable;
+        };
+    };
 };
+
 &spi1 {
     compatible = "nordic,nrf-spim";
     status = "okay";
+
     pinctrl-0 = <&spi1_default>;
     pinctrl-1 = <&spi1_sleep>;
     pinctrl-names = "default", "sleep";
+
     cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
 };
+
+/* Wirtualny LED strip — 1 pozycja, P0.06 na dongle niepodłączony.
+ * Potrzebny do kompilacji rgb_ug; ZMK synchronizuje stan RGB do połówek przez BLE. */
+&spi3 {
+    compatible = "nordic,nrf-spim";
+    status = "okay";
+    pinctrl-0 = <&spi3_default>;
+    pinctrl-1 = <&spi3_sleep>;
+    pinctrl-names = "default", "sleep";
+
+    led_strip: ws2812@0 {
+        compatible = "worldsemi,ws2812-spi";
+        reg = <0>;
+        spi-max-frequency = <4000000>;
+        spi-one-frame = <0x70>;
+        spi-zero-frame = <0x40>;
+        chain-length = <1>;
+        color-mapping = <LED_COLOR_ID_GREEN
+                         LED_COLOR_ID_RED
+                         LED_COLOR_ID_BLUE>;
+    };
+};
+
 / {
     chosen {
         zmk,kscan = &mock_kscan;
         zephyr,display = &gc9a01;
         zmk,physical-layout = &redoxft_physical_layout;
+        zmk,underglow = &led_strip;
     };
+
     /*
      * Mapowanie matrycy dla ZMK Studio (dongle nie skanuje bezpośrednio)
      */
@@ -64,28 +110,37 @@ RC(3,0) RC(3,1) RC(3,2) RC(3,3) RC(3,4) RC(3,5) RC(2,6) RC(3,6)   RC(3,7) RC(2,7
 RC(4,0) RC(4,1) RC(4,2) RC(4,3)      RC(4,4)    RC(4,5) RC(4,6)   RC(4,7) RC(4,8)     RC(4,9)    RC(4,10) RC(4,11) RC(4,12) RC(4,13)
         >;
     };
+
     mock_kscan: mock_kscan_0 {
         compatible = "zmk,kscan-mock";
         columns = <0>;
         rows = <0>;
         events = <0>;
     };
+
     mipi_dbi {
         compatible = "zephyr,mipi-dbi-spi";
         spi-dev = <&spi1>;
+
         dc-gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>;
         reset-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
+
         write-only;
+
         #address-cells = <1>;
         #size-cells = <0>;
+
         gc9a01: gc9x01x@0 {
             compatible = "galaxycore,gc9x01x";
             reg = <0>;
+
             mipi-max-frequency = <8000000>;
             mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE";
+
             width = <240>;
             height = <240>;
             pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
+
             display-inversion;
         };
     };
