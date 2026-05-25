@@ -1,11 +1,16 @@
 /*
- * Zyra FT Dongle - FalbaTech Status Screen
- * GC9A01 240x240
+ * Redox FT Dongle — FalbaTech Status Screen
+ * GC9A01 240×240 okrągły TFT, nice!nano v2
+ * SPDX-License-Identifier: MIT
  *
- * Kolory lv_color_hex() — wartości nieintuicyjne (BGR + byte-swap SPI):
- *   0xE00039 → ZIELONY     0x884890 → SZARY
- *   0xFFFFFF → BIAŁY       0x000000 → CZARNY
- * Surowe dane obrazów (lv_image_dsc_t): RGB565 big-endian.
+ * Funkcje:
+ *  - Splash z logo FalbaTech (2.5s)
+ *  - Nazwa aktywnej warstwy (Montserrat 28)
+ *  - Wskaźniki połączenia L/R z baterią (10-segmentowy słupek)
+ *  - 5 kropek profilu BT
+ *  - Wskaźniki CAPS / NUM lock
+ *  - WPM (słowa na minutę) — aktualizowany w czasie rzeczywistym
+ *  - Tryb wyjścia: USB lub BLE
  */
 
 #include <zephyr/kernel.h>
@@ -19,325 +24,380 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/split_central_status_changed.h>
 #include <zmk/events/hid_indicators_changed.h>
+#include <zmk/events/wpm_state_changed.h>
+#include <zmk/events/output_selection_changed.h>
 
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
 #include <zmk/hid_indicators.h>
 #include <zmk/hid.h>
+#include <zmk/wpm.h>
+#include <zmk/output.h>
 
 #include "falbatech_logo.h"
 
 LV_IMG_DECLARE(zmk_studio_logo);
 
-LOG_MODULE_REGISTER(ft_dongle_screen, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(ft_status_screen, CONFIG_LOG_DEFAULT_LEVEL);
 
-/* ── Timing ───────────────────────────────────────────────────── */
-#define SPLASH_DURATION_MS  2500
+/* ── Timing ────────────────────────────────────────────────────── */
+#define SPLASH_MS       2500
 
-/* ── Colors ───────────────────────────────────────────────────── */
-#define COLOR_BG    0x000000
-#define COLOR_TEXT  0xFFFFFF
-#define COLOR_ON    0xE00039   /* → ZIELONY */
-#define COLOR_OFF   0x884890   /* → SZARY   */
+/* ── Kolory (GC9A01, bez LV_COLOR_16_SWAP) ─────────────────────
+ * lv_color_hex() na tym wyświetlaczu działa w kolejności BGR:
+ *   chcesz zielony  → podaj 0xE00039
+ *   chcesz szary    → podaj 0x884890
+ *   chcesz pomarańczowy → podaj 0x00C8FF                         */
+#define C_BG            0x000000   /* czarny    */
+#define C_TEXT          0xFFFFFF   /* biały     */
+#define C_ON            0xE00039   /* zielony   */
+#define C_OFF           0x884890   /* szary     */
+#define C_USB           0x00A0FF   /* niebieski (USB) */
+#define C_BLE           0xE00039   /* zielony (BLE)   */
+#define C_WPM           0xA0FF00   /* żółto-zielony   */
 
-/* ── Bar geometry ─────────────────────────────────────────────── */
-#define BAR_SEGMENTS  10
-#define BAR_W         18
-#define SEG_H          5
-#define SEG_GAP        2
+/* ── Pasek baterii ──────────────────────────────────────────────
+ * 10 segmentów, każdy 5×18px z przerwą 2px                       */
+#define BAR_SEGS        10
+#define SEG_H            5
+#define SEG_W           18
+#define SEG_GAP          2
 
-/* ── State ────────────────────────────────────────────────────── */
+/* ── Stan globalny ─────────────────────────────────────────────── */
 static bool                 splash_done     = false;
-static bool                 left_connected  = false;
-static bool                 right_connected = false;
-static int                  battery_left    = 0;
-static int                  battery_right   = 0;
+static bool                 left_conn       = false;
+static bool                 right_conn      = false;
+static int                  bat_left        = 0;
+static int                  bat_right       = 0;
+static uint8_t              left_reconnects = 0;
+static uint8_t              right_reconnects = 0;
 static zmk_hid_indicators_t hid_indicators  = 0;
+static uint8_t              wpm             = 0;
+static bool                 usb_output      = false;
 
-/* ── Work ─────────────────────────────────────────────────────── */
+/* ── Delayed work ────────────────────────────────────────────────*/
 static struct k_work_delayable splash_work;
 
-/* ── Widgets ──────────────────────────────────────────────────── */
+/* ── Widgety ────────────────────────────────────────────────────── */
 static lv_obj_t *screen;
-static lv_obj_t *splash_logo;
-static lv_obj_t *top_logo;
-static lv_obj_t *layer_label;
-static lv_obj_t *left_percent;
-static lv_obj_t *right_percent;
-static lv_obj_t *left_link;
-static lv_obj_t *right_link;
-static lv_obj_t *left_segments[BAR_SEGMENTS];
-static lv_obj_t *right_segments[BAR_SEGMENTS];
+static lv_obj_t *splash_img;
+static lv_obj_t *studio_logo;
+static lv_obj_t *layer_lbl;
+static lv_obj_t *left_lbl;
+static lv_obj_t *right_lbl;
+static lv_obj_t *left_pct;
+static lv_obj_t *right_pct;
+static lv_obj_t *left_segs[BAR_SEGS];
+static lv_obj_t *right_segs[BAR_SEGS];
 static lv_obj_t *bt_dots[5];
-static lv_obj_t *caps_indicator;
-static lv_obj_t *num_indicator;
+static lv_obj_t *caps_pill;
+static lv_obj_t *num_pill;
+static lv_obj_t *wpm_lbl;
+static lv_obj_t *output_dot;
+static lv_obj_t *output_lbl;
 
-/* ═══════════════════ Helpers ═══════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+ * Helpers
+ * ═══════════════════════════════════════════════════════════════ */
 
-static void set_hidden(lv_obj_t *obj, bool hidden)
+static inline void set_hidden(lv_obj_t *o, bool hide)
 {
-    if (!obj) return;
-    if (hidden) lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
-    else        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    if (!o) return;
+    if (hide) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+    else      lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void style_text(lv_obj_t *obj, uint32_t color, const lv_font_t *font)
+static lv_obj_t *box(lv_obj_t *parent, int w, int h, uint32_t color, int r)
 {
-    lv_obj_set_style_text_color(obj, lv_color_hex(color), 0);
-    lv_obj_set_style_text_font(obj, font, 0);
+    lv_obj_t *o = lv_obj_create(parent);
+    lv_obj_set_size(o, w, h);
+    lv_obj_set_style_bg_color(o, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(o, 0, 0);
+    lv_obj_set_style_radius(o, r, 0);
+    lv_obj_set_style_pad_all(o, 0, 0);
+    lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+    return o;
 }
 
-static lv_obj_t *make_box(lv_obj_t *parent, int w, int h,
-                          uint32_t color, int radius)
+static lv_obj_t *label(lv_obj_t *parent, const char *txt,
+                        const lv_font_t *font, uint32_t color)
 {
-    lv_obj_t *obj = lv_obj_create(parent);
-    lv_obj_set_size(obj, w, h);
-    lv_obj_set_style_bg_color(obj, lv_color_hex(color), 0);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(obj, 0, 0);
-    lv_obj_set_style_radius(obj, radius, 0);
-    lv_obj_set_style_pad_all(obj, 0, 0);
-    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
-    return obj;
+    lv_obj_t *o = lv_label_create(parent);
+    lv_label_set_text(o, txt);
+    lv_obj_set_style_text_font(o, font, 0);
+    lv_obj_set_style_text_color(o, lv_color_hex(color), 0);
+    return o;
 }
 
-static const char *layer_name(uint8_t layer)
+static lv_obj_t *pill(lv_obj_t *parent, const char *txt, int x_ofs)
 {
-    const char *name = zmk_keymap_layer_name(layer);
-    if (name) return name;
-    switch (layer) {
-        case 0: return "Base";
-        case 1: return "Nav";
-        case 2: return "Num";
-        case 3: return "Sym";
-        case 4: return "Fn";
-        case 5: return "Game";
-        default: return "Layer";
-    }
+    lv_obj_t *o = lv_label_create(parent);
+    lv_label_set_text(o, txt);
+    lv_obj_set_style_text_font(o, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(o, lv_color_hex(C_BG), 0);
+    lv_obj_set_style_bg_color(o, lv_color_hex(C_ON), 0);
+    lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(o, 4, 0);
+    lv_obj_set_style_pad_hor(o, 5, 0);
+    lv_obj_set_style_pad_ver(o, 2, 0);
+    lv_obj_align(o, LV_ALIGN_CENTER, x_ofs, -20);
+    set_hidden(o, true);
+    return o;
 }
 
-/* ═══════════════════ Update functions ══════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+ * Update functions
+ * ═══════════════════════════════════════════════════════════════ */
 
 static void update_layer(void)
 {
-    set_hidden(layer_label, !splash_done);
-    if (splash_done) {
-        uint8_t idx = zmk_keymap_highest_layer_active();
-        lv_label_set_text(layer_label, layer_name(idx));
-    }
+    if (!splash_done) { set_hidden(layer_lbl, true); return; }
+    set_hidden(layer_lbl, false);
+    uint8_t idx  = zmk_keymap_highest_layer_active();
+    const char *n = zmk_keymap_layer_name(idx);
+    lv_label_set_text(layer_lbl, n ? n : "Layer");
 }
 
-static void draw_segment_bar(lv_obj_t **segs, int percent)
+static void draw_bar(lv_obj_t **segs, int pct)
 {
-    if (percent < 0)   percent = 0;
-    if (percent > 100) percent = 100;
-    int filled = (percent + 9) / 10;
-    for (int i = 0; i < BAR_SEGMENTS; i++) {
+    int filled = (CLAMP(pct, 0, 100) + 9) / 10;
+    for (int i = 0; i < BAR_SEGS; i++) {
         if (!segs[i]) continue;
-        uint32_t color = (i < filled) ? COLOR_ON : COLOR_OFF;
-        lv_obj_set_style_bg_color(segs[i], lv_color_hex(color), 0);
+        lv_obj_set_style_bg_color(segs[i],
+            lv_color_hex(i < filled ? C_ON : C_OFF), 0);
     }
 }
 
-static void update_side_battery(lv_obj_t *pct, lv_obj_t **segs,
-                                int percent, bool connected)
+static void update_battery(void)
 {
-    bool show = splash_done && connected;
-    set_hidden(pct, !show);
-    for (int i = 0; i < BAR_SEGMENTS; i++) set_hidden(segs[i], !show);
-    if (show) {
-        lv_label_set_text_fmt(pct, "%d%%", percent);
-        draw_segment_bar(segs, percent);
+    bool show_l = splash_done && left_conn;
+    bool show_r = splash_done && right_conn;
+
+    set_hidden(left_pct,  !show_l);
+    set_hidden(right_pct, !show_r);
+    set_hidden(left_lbl,  !splash_done);
+    set_hidden(right_lbl, !splash_done);
+
+    for (int i = 0; i < BAR_SEGS; i++) {
+        set_hidden(left_segs[i],  !show_l);
+        set_hidden(right_segs[i], !show_r);
     }
-}
 
-static void update_battery_visuals(void)
-{
-    update_side_battery(left_percent,  left_segments,  battery_left,  left_connected);
-    update_side_battery(right_percent, right_segments, battery_right, right_connected);
-}
+    if (show_l) {
+        lv_label_set_text_fmt(left_pct, "%d%%", bat_left);
+        draw_bar(left_segs, bat_left);
+    }
+    if (show_r) {
+        lv_label_set_text_fmt(right_pct, "%d%%", bat_right);
+        draw_bar(right_segs, bat_right);
+    }
 
-static void update_link_status(void)
-{
-    set_hidden(left_link,  !splash_done);
-    set_hidden(right_link, !splash_done);
-    if (!splash_done) return;
-
-    lv_label_set_text(left_link,  "L");
-    lv_label_set_text(right_link, "R");
-    lv_obj_set_style_text_color(left_link,
-        lv_color_hex(left_connected  ? COLOR_ON : COLOR_OFF), 0);
-    lv_obj_set_style_text_color(right_link,
-        lv_color_hex(right_connected ? COLOR_ON : COLOR_OFF), 0);
+    if (splash_done) {
+        /* Kolor L/R: zielony = połączone, szary = nie, żółty = niestabilne */
+        #define C_UNSTABLE 0x00BEFF   /* żółty */
+        lv_obj_set_style_text_color(left_lbl,
+            lv_color_hex(!left_conn   ? C_OFF :
+                         left_reconnects > 2 ? C_UNSTABLE : C_ON), 0);
+        lv_obj_set_style_text_color(right_lbl,
+            lv_color_hex(!right_conn  ? C_OFF :
+                         right_reconnects > 2 ? C_UNSTABLE : C_ON), 0);
+        /* "L!" / "R!" gdy połączenie niestabilne */
+        lv_label_set_text(left_lbl,  left_reconnects  > 2 ? "L!" : "L");
+        lv_label_set_text(right_lbl, right_reconnects > 2 ? "R!" : "R");
+    }
 }
 
 static void update_bt_profile(void)
 {
-    for (int i = 0; i < 5; i++) set_hidden(bt_dots[i], !splash_done);
-    if (!splash_done) return;
-
+    if (!splash_done) {
+        for (int i = 0; i < 5; i++) set_hidden(bt_dots[i], true);
+        return;
+    }
     uint8_t active = zmk_ble_active_profile_index();
     for (int i = 0; i < 5; i++) {
         if (!bt_dots[i]) continue;
-        if (i == active) {
-            lv_obj_set_style_bg_color(bt_dots[i], lv_color_hex(COLOR_ON), 0);
-            lv_obj_set_size(bt_dots[i], 10, 10);
-        } else {
-            lv_obj_set_style_bg_color(bt_dots[i], lv_color_hex(COLOR_OFF), 0);
-            lv_obj_set_size(bt_dots[i], 8, 8);
-        }
-        lv_obj_align(bt_dots[i], LV_ALIGN_BOTTOM_MID, -32 + (i * 16), -14);
+        set_hidden(bt_dots[i], false);
+        bool is_active = (i == active);
+        lv_obj_set_size(bt_dots[i], is_active ? 10 : 8, is_active ? 10 : 8);
+        lv_obj_set_style_bg_color(bt_dots[i],
+            lv_color_hex(is_active ? C_ON : C_OFF), 0);
+        lv_obj_align(bt_dots[i], LV_ALIGN_BOTTOM_MID,
+                     -32 + (i * 16), -14);
     }
 }
 
-static void update_hid_indicators(void)
+static void update_hid(void)
 {
-    set_hidden(caps_indicator, !(splash_done && (hid_indicators & HID_KBD_LED_CAPS_LOCK)));
-    set_hidden(num_indicator,  !(splash_done && (hid_indicators & HID_KBD_LED_NUM_LOCK)));
+    set_hidden(caps_pill, !(splash_done && (hid_indicators & HID_KBD_LED_CAPS_LOCK)));
+    set_hidden(num_pill,  !(splash_done && (hid_indicators & HID_KBD_LED_NUM_LOCK)));
+}
+
+static void update_wpm(void)
+{
+    if (!splash_done) { set_hidden(wpm_lbl, true); return; }
+    set_hidden(wpm_lbl, false);
+    lv_label_set_text_fmt(wpm_lbl, "%d WPM", wpm);
+}
+
+static void update_output(void)
+{
+    if (!splash_done) {
+        set_hidden(output_dot, true);
+        set_hidden(output_lbl, true);
+        return;
+    }
+    set_hidden(output_dot, false);
+    set_hidden(output_lbl, false);
+    lv_obj_set_style_bg_color(output_dot,
+        lv_color_hex(usb_output ? C_USB : C_BLE), 0);
+    lv_label_set_text(output_lbl, usb_output ? "USB" : "BLE");
 }
 
 static void refresh_all(void)
 {
     update_layer();
     update_bt_profile();
-    update_link_status();
-    update_battery_visuals();
-    update_hid_indicators();
+    update_battery();
+    update_hid();
+    update_wpm();
+    update_output();
 }
 
-/* ═══════════════════ Build UI ══════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+ * Build UI
+ * ═══════════════════════════════════════════════════════════════ */
 
 static void build_splash(void)
 {
-    splash_logo = lv_image_create(screen);
-    lv_image_set_src(splash_logo, &falbatech_logo_large);
-    lv_obj_align(splash_logo, LV_ALIGN_CENTER, 0, 0);
+    splash_img = lv_image_create(screen);
+    lv_image_set_src(splash_img, &falbatech_logo_large);
+    lv_obj_align(splash_img, LV_ALIGN_CENTER, 0, 0);
 }
 
-static void build_top_logo(void)
+static void build_header(void)
 {
-    top_logo = lv_image_create(screen);
-    lv_image_set_src(top_logo, &zmk_studio_logo);
-    lv_obj_align(top_logo, LV_ALIGN_TOP_MID, 20, 10);
-    set_hidden(top_logo, true);
+    /* Studio logo — lewy górny */
+    studio_logo = lv_image_create(screen);
+    lv_image_set_src(studio_logo, &zmk_studio_logo);
+    lv_obj_align(studio_logo, LV_ALIGN_TOP_MID, 20, 10);
+    set_hidden(studio_logo, true);
+
+    /* Nazwa warstwy — środek ekranu */
+    layer_lbl = label(screen, "Base", &lv_font_montserrat_28, C_TEXT);
+    lv_obj_align(layer_lbl, LV_ALIGN_CENTER, 0, -42);
+    set_hidden(layer_lbl, true);
 }
 
-static void build_layer_label(void)
+static void build_battery_side(lv_obj_t **segs, lv_obj_t **pct_out,
+                                lv_obj_t **lbl_out, int sign,
+                                const char *side_char)
 {
-    layer_label = lv_label_create(screen);
-    lv_label_set_text(layer_label, "Base");
-    style_text(layer_label, COLOR_TEXT, &lv_font_montserrat_28);
-    lv_obj_align(layer_label, LV_ALIGN_CENTER, 0, -42);
-    set_hidden(layer_label, true);
-}
+    int x_bar = sign * 76;
+    int x_lbl = sign * 48;
 
-static lv_obj_t *build_indicator_pill(const char *text, int x_ofs)
-{
-    lv_obj_t *obj = lv_label_create(screen);
-    lv_label_set_text(obj, text);
-    lv_obj_set_style_text_color(obj, lv_color_hex(COLOR_BG), 0);
-    lv_obj_set_style_text_font(obj, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_bg_color(obj, lv_color_hex(COLOR_ON), 0);
-    lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(obj, 4, 0);
-    lv_obj_set_style_pad_hor(obj, 5, 0);
-    lv_obj_set_style_pad_ver(obj, 2, 0);
-    lv_obj_align(obj, LV_ALIGN_CENTER, x_ofs, -20);
-    set_hidden(obj, true);
-    return obj;
-}
+    /* Literka L lub R (wskaźnik połączenia) */
+    *lbl_out = label(screen, side_char, &lv_font_montserrat_14, C_OFF);
+    lv_obj_align(*lbl_out, LV_ALIGN_CENTER, x_lbl, 2);
+    set_hidden(*lbl_out, true);
 
-static void build_indicators(void)
-{
-    caps_indicator = build_indicator_pill("CAPS", -24);
-    num_indicator  = build_indicator_pill("NUM",   24);
-}
+    /* Procent baterii */
+    *pct_out = label(screen, "0%", &lv_font_montserrat_14, C_TEXT);
+    lv_obj_align(*pct_out, LV_ALIGN_CENTER, x_bar, -6);
+    set_hidden(*pct_out, true);
 
-static void build_segment_bar(lv_obj_t **segs, int x)
-{
-    int total_h = (BAR_SEGMENTS * SEG_H) + ((BAR_SEGMENTS - 1) * SEG_GAP);
-    int start_y = 40 + (total_h / 2);
-    for (int i = 0; i < BAR_SEGMENTS; i++) {
-        segs[i] = make_box(screen, BAR_W, SEG_H, COLOR_OFF, 2);
-        int y = start_y - (i * (SEG_H + SEG_GAP));
-        lv_obj_align(segs[i], LV_ALIGN_CENTER, x, y);
+    /* Segmentowany słupek baterii */
+    int total_h = BAR_SEGS * SEG_H + (BAR_SEGS - 1) * SEG_GAP;
+    int start_y = 40 + total_h / 2;
+    for (int i = 0; i < BAR_SEGS; i++) {
+        segs[i] = box(screen, SEG_W, SEG_H, C_OFF, 2);
+        lv_obj_align(segs[i], LV_ALIGN_CENTER,
+                     x_bar, start_y - i * (SEG_H + SEG_GAP));
         set_hidden(segs[i], true);
     }
 }
 
-static void build_battery_widgets(void)
+static void build_battery(void)
 {
-    left_percent = lv_label_create(screen);
-    style_text(left_percent, COLOR_TEXT, &lv_font_montserrat_14);
-    lv_obj_align(left_percent, LV_ALIGN_CENTER, -76, -6);
-    set_hidden(left_percent, true);
-
-    right_percent = lv_label_create(screen);
-    style_text(right_percent, COLOR_TEXT, &lv_font_montserrat_14);
-    lv_obj_align(right_percent, LV_ALIGN_CENTER, 76, -6);
-    set_hidden(right_percent, true);
-
-    left_link = lv_label_create(screen);
-    style_text(left_link, COLOR_OFF, &lv_font_montserrat_14);
-    lv_obj_align(left_link, LV_ALIGN_CENTER, -48, 2);
-    set_hidden(left_link, true);
-
-    right_link = lv_label_create(screen);
-    style_text(right_link, COLOR_OFF, &lv_font_montserrat_14);
-    lv_obj_align(right_link, LV_ALIGN_CENTER, 48, 2);
-    set_hidden(right_link, true);
-
-    build_segment_bar(left_segments,  -76);
-    build_segment_bar(right_segments,  76);
+    build_battery_side(left_segs,  &left_pct,  &left_lbl,  -1, "L");
+    build_battery_side(right_segs, &right_pct, &right_lbl,  1, "R");
 }
 
 static void build_bt_dots(void)
 {
     for (int i = 0; i < 5; i++) {
-        bt_dots[i] = make_box(screen, 8, 8, COLOR_OFF, 4);
-        lv_obj_align(bt_dots[i], LV_ALIGN_BOTTOM_MID, -32 + (i * 16), -14);
+        bt_dots[i] = box(screen, 8, 8, C_OFF, 4);
+        lv_obj_align(bt_dots[i], LV_ALIGN_BOTTOM_MID,
+                     -32 + (i * 16), -14);
         set_hidden(bt_dots[i], true);
     }
 }
 
-/* ═══════════════════ Splash → main ════════════════════════════ */
-
-static void show_status(struct k_work *work)
+static void build_hid_indicators(void)
 {
-    if (splash_logo) {
-        lv_obj_del(splash_logo);
-        splash_logo = NULL;
-    }
+    caps_pill = pill(screen, "CAPS", -28);
+    num_pill  = pill(screen, "NUM",   28);
+}
 
+static void build_wpm(void)
+{
+    /* WPM — prawy dolny, nad kropkami BT */
+    wpm_lbl = label(screen, "0 WPM", &lv_font_montserrat_14, C_WPM);
+    lv_obj_align(wpm_lbl, LV_ALIGN_BOTTOM_MID, 0, -36);
+    set_hidden(wpm_lbl, true);
+}
+
+static void build_output(void)
+{
+    /* Mała kropka + etykieta "USB" / "BLE" — lewy dolny narożnik */
+    output_dot = box(screen, 8, 8, C_BLE, 4);
+    lv_obj_align(output_dot, LV_ALIGN_BOTTOM_LEFT, 28, -22);
+    set_hidden(output_dot, true);
+
+    output_lbl = label(screen, "BLE", &lv_font_montserrat_14, C_TEXT);
+    lv_obj_align(output_lbl, LV_ALIGN_BOTTOM_LEFT, 40, -26);
+    set_hidden(output_lbl, true);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * Splash → main transition
+ * ═══════════════════════════════════════════════════════════════ */
+
+static void show_main(struct k_work *work)
+{
+    if (splash_img) {
+        lv_obj_del(splash_img);
+        splash_img = NULL;
+    }
     splash_done = true;
-    set_hidden(top_logo, false);
+    set_hidden(studio_logo, false);
     refresh_all();
 }
 
-/* ═══════════════════ Event listener ═══════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+ * Event listener
+ * ═══════════════════════════════════════════════════════════════ */
 
-static int ft_dongle_listener(const zmk_event_t *eh)
+static int ft_screen_listener(const zmk_event_t *eh)
 {
-    /* Split central — obsługiwane zawsze (też przed splash) */
-    if (as_zmk_split_central_status_changed(eh)) {
-        const struct zmk_split_central_status_changed *ev =
-            as_zmk_split_central_status_changed(eh);
-
-        if (ev->slot == 0) {
-            left_connected = ev->connected;
-            if (!ev->connected) battery_left = 0;
-        } else if (ev->slot == 1) {
-            right_connected = ev->connected;
-            if (!ev->connected) battery_right = 0;
+    /* Połączenie split — obsługiwane zawsze (też przed splash) */
+    const struct zmk_split_central_status_changed *sc =
+        as_zmk_split_central_status_changed(eh);
+    if (sc) {
+        if (sc->slot == 0) {
+            left_conn = sc->connected;
+            if (sc->connected) left_reconnects  = sc->reconnect_count;
+            else               bat_left = 0;
+        } else if (sc->slot == 1) {
+            right_conn = sc->connected;
+            if (sc->connected) right_reconnects = sc->reconnect_count;
+            else               bat_right = 0;
         }
-
-        if (splash_done) {
-            update_link_status();
-            update_battery_visuals();
-        }
+        if (splash_done) update_battery();
         return ZMK_EV_EVENT_BUBBLE;
     }
 
+    /* Reszta tylko po splash */
     if (!splash_done) return ZMK_EV_EVENT_BUBBLE;
 
     if (as_zmk_layer_state_changed(eh)) {
@@ -350,55 +410,77 @@ static int ft_dongle_listener(const zmk_event_t *eh)
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    if (as_zmk_peripheral_battery_state_changed(eh)) {
-        const struct zmk_peripheral_battery_state_changed *ev =
-            as_zmk_peripheral_battery_state_changed(eh);
-
-        if (ev->source == 0)      battery_left  = ev->state_of_charge;
-        else if (ev->source == 1) battery_right = ev->state_of_charge;
-
-        update_battery_visuals();
+    const struct zmk_peripheral_battery_state_changed *pb =
+        as_zmk_peripheral_battery_state_changed(eh);
+    if (pb) {
+        if      (pb->source == 0) bat_left  = pb->state_of_charge;
+        else if (pb->source == 1) bat_right = pb->state_of_charge;
+        update_battery();
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    if (as_zmk_hid_indicators_changed(eh)) {
-        const struct zmk_hid_indicators_changed *ev =
-            as_zmk_hid_indicators_changed(eh);
-        hid_indicators = ev->indicators;
-        update_hid_indicators();
+    const struct zmk_hid_indicators_changed *hi =
+        as_zmk_hid_indicators_changed(eh);
+    if (hi) {
+        hid_indicators = hi->indicators;
+        update_hid();
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
+    /* WPM — aktualizacja na żywo */
+    const struct zmk_wpm_state_changed *wpm_ev =
+        as_zmk_wpm_state_changed(eh);
+    if (wpm_ev) {
+        wpm = wpm_ev->state;
+        update_wpm();
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
+    /* Zmiana wyjścia USB ↔ BLE */
+    if (as_zmk_output_selection_changed(eh)) {
+        usb_output = (zmk_output_current() == ZMK_OUTPUT_USB);
+        update_output();
         return ZMK_EV_EVENT_BUBBLE;
     }
 
     return ZMK_EV_EVENT_BUBBLE;
 }
 
-ZMK_LISTENER(ft_dongle_screen, ft_dongle_listener);
-ZMK_SUBSCRIPTION(ft_dongle_screen, zmk_split_central_status_changed);
-ZMK_SUBSCRIPTION(ft_dongle_screen, zmk_layer_state_changed);
-ZMK_SUBSCRIPTION(ft_dongle_screen, zmk_ble_active_profile_changed);
-ZMK_SUBSCRIPTION(ft_dongle_screen, zmk_peripheral_battery_state_changed);
-ZMK_SUBSCRIPTION(ft_dongle_screen, zmk_hid_indicators_changed);
+ZMK_LISTENER(ft_screen, ft_screen_listener);
+ZMK_SUBSCRIPTION(ft_screen, zmk_split_central_status_changed);
+ZMK_SUBSCRIPTION(ft_screen, zmk_layer_state_changed);
+ZMK_SUBSCRIPTION(ft_screen, zmk_ble_active_profile_changed);
+ZMK_SUBSCRIPTION(ft_screen, zmk_peripheral_battery_state_changed);
+ZMK_SUBSCRIPTION(ft_screen, zmk_hid_indicators_changed);
+ZMK_SUBSCRIPTION(ft_screen, zmk_wpm_state_changed);
+ZMK_SUBSCRIPTION(ft_screen, zmk_output_selection_changed);
 
-/* ═══════════════════ Init ══════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+ * Inicjalizacja ekranu — wywoływana przez ZMK display system
+ * ═══════════════════════════════════════════════════════════════ */
 
 lv_obj_t *zmk_display_status_screen(void)
 {
     screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(screen, lv_color_hex(COLOR_BG), 0);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(C_BG), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
     build_splash();
-    build_top_logo();
-    build_layer_label();
-    build_indicators();
-    build_battery_widgets();
+    build_header();
+    build_battery();
     build_bt_dots();
+    build_hid_indicators();
+    build_wpm();
+    build_output();
 
-    k_work_init_delayable(&splash_work, show_status);
-    k_work_schedule(&splash_work, K_MSEC(SPLASH_DURATION_MS));
+    k_work_init_delayable(&splash_work, show_main);
+    k_work_schedule(&splash_work, K_MSEC(SPLASH_MS));
+
+    /* Inicjalizuj stan wyjścia */
+    usb_output = (zmk_output_current() == ZMK_OUTPUT_USB);
 
     return screen;
 }
