@@ -24,14 +24,16 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/split_central_status_changed.h>
 #include <zmk/events/hid_indicators_changed.h>
-#include <zmk/events/wpm_state_changed.h>
 #include <zmk/events/endpoint_changed.h>
+#if IS_ENABLED(CONFIG_ZMK_WPM)
+#include <zmk/events/wpm_state_changed.h>
+#include <zmk/wpm.h>
+#endif
 
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
 #include <zmk/hid_indicators.h>
 #include <zmk/hid.h>
-#include <zmk/wpm.h>
 #include <zmk/endpoints.h>
 #include <zmk/endpoints_types.h>
 
@@ -428,6 +430,7 @@ static int ft_screen_listener(const zmk_event_t *eh)
         return ZMK_EV_EVENT_BUBBLE;
     }
 
+#if IS_ENABLED(CONFIG_ZMK_WPM)
     /* WPM — aktualizacja na żywo */
     const struct zmk_wpm_state_changed *wpm_ev =
         as_zmk_wpm_state_changed(eh);
@@ -436,6 +439,7 @@ static int ft_screen_listener(const zmk_event_t *eh)
         update_wpm();
         return ZMK_EV_EVENT_BUBBLE;
     }
+#endif
 
     /* Zmiana wyjścia USB ↔ BLE */
     if (as_zmk_endpoint_changed(eh)) {
@@ -453,7 +457,9 @@ ZMK_SUBSCRIPTION(ft_screen, zmk_layer_state_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_ble_active_profile_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_peripheral_battery_state_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_hid_indicators_changed);
+#if IS_ENABLED(CONFIG_ZMK_WPM)
 ZMK_SUBSCRIPTION(ft_screen, zmk_wpm_state_changed);
+#endif
 ZMK_SUBSCRIPTION(ft_screen, zmk_endpoint_changed);
 
 /* ═══════════════════════════════════════════════════════════════
