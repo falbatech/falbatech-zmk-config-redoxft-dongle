@@ -25,7 +25,7 @@
 #include <zmk/events/split_central_status_changed.h>
 #include <zmk/events/hid_indicators_changed.h>
 #include <zmk/events/wpm_state_changed.h>
-#include <zmk/events/endpoint_selection_changed.h>
+#include <zmk/events/endpoint_changed.h>
 
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
@@ -33,6 +33,7 @@
 #include <zmk/hid.h>
 #include <zmk/wpm.h>
 #include <zmk/endpoints.h>
+#include <zmk/endpoints_types.h>
 
 #include "falbatech_logo.h"
 
@@ -437,8 +438,8 @@ static int ft_screen_listener(const zmk_event_t *eh)
     }
 
     /* Zmiana wyjścia USB ↔ BLE */
-    if (as_zmk_endpoint_selection_changed(eh)) {
-        usb_output = (zmk_endpoints_selected().transport == ZMK_TRANSPORT_USB);
+    if (as_zmk_endpoint_changed(eh)) {
+        usb_output = (zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_USB);
         update_output();
         return ZMK_EV_EVENT_BUBBLE;
     }
@@ -453,7 +454,7 @@ ZMK_SUBSCRIPTION(ft_screen, zmk_ble_active_profile_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_peripheral_battery_state_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_hid_indicators_changed);
 ZMK_SUBSCRIPTION(ft_screen, zmk_wpm_state_changed);
-ZMK_SUBSCRIPTION(ft_screen, zmk_endpoint_selection_changed);
+ZMK_SUBSCRIPTION(ft_screen, zmk_endpoint_changed);
 
 /* ═══════════════════════════════════════════════════════════════
  * Inicjalizacja ekranu — wywoływana przez ZMK display system
@@ -480,7 +481,7 @@ lv_obj_t *zmk_display_status_screen(void)
     k_work_schedule(&splash_work, K_MSEC(SPLASH_MS));
 
     /* Inicjalizuj stan wyjścia */
-    usb_output = (zmk_endpoints_selected().transport == ZMK_TRANSPORT_USB);
+    usb_output = (zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_USB);
 
     return screen;
 }
